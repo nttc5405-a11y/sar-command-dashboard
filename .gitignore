@@ -1,0 +1,17 @@
+# 內含真實隊員姓名等隱私資料，絕對不能上傳到 GitHub
+10月場控時序.xlsx
+場控時序_結構分析.md
+
+# Google 試算表捷徑檔（.gsheet）內含帳號信箱與試算表檔案 ID，不應公開
+*.gsheet
+*.gdoc
+*.gslides
+*.gdraw
+*.gform
+
+# 常見通用排除規則（本專案目前不使用 Node.js，保留無妨）
+node_modules/
+.DS_Store
+Thumbs.db
+*.log
+.env

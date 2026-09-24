@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>特搜場控即時看板</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-left">
+    <h1>特搜場控即時看板</h1>
+    <div id="nowClock" class="now-clock">--:--:--</div>
+  </div>
+  <div class="topbar-center">
+    <button id="prevSlotBtn" class="nav-btn" type="button" aria-label="上一時段">◀</button>
+    <select id="slotSelect" class="slot-select" aria-label="選擇時段"></select>
+    <button id="nextSlotBtn" class="nav-btn" type="button" aria-label="下一時段">▶</button>
+  </div>
+  <div class="topbar-right">
+    <button id="settingsBtn" class="icon-btn" type="button" aria-label="開啟設定面板">⚙ 設定</button>
+  </div>
+</header>
+
+<div id="nonCurrentBanner" class="non-current-banner hidden">
+  <span id="nonCurrentText"></span>
+  <button id="backToCurrentBtn" type="button">回到目前時段</button>
+</div>
+
+<main>
+
+  <section id="currentSlotCard" class="card current-slot-card">
+    <div class="current-slot-header">
+      <h2>目前時段總覽</h2>
+      <span id="restBadge" class="rest-badge hidden">休息中</span>
+    </div>
+    <div class="current-slot-grid">
+      <div class="slot-field"><span class="slot-field-label">階段</span><span id="slotPhase" class="slot-field-value">—</span></div>
+      <div class="slot-field"><span class="slot-field-label">區域</span><span id="slotArea" class="slot-field-value">—</span></div>
+      <div class="slot-field"><span class="slot-field-label">傷患編號</span><span id="slotVictim" class="slot-field-value">—</span></div>
+      <div class="slot-field"><span class="slot-field-label">INJECT</span><span id="slotInject" class="slot-field-value">—</span></div>
+      <div class="slot-field"><span class="slot-field-label">LEMA會議</span><span id="slotLema" class="slot-field-value">—</span></div>
+      <div class="slot-field"><span class="slot-field-label">OCC會議</span><span id="slotOcc" class="slot-field-value">—</span></div>
+      <div class="slot-field"><span class="slot-field-label">拍照攝影</span><span id="slotPhoto" class="slot-field-value">—</span></div>
+      <div class="slot-field"><span class="slot-field-label">救護車司機</span><span id="slotAmbulance" class="slot-field-value">—</span></div>
+      <div class="slot-field"><span class="slot-field-label">後送醫院</span><span id="slotHospital" class="slot-field-value">—</span></div>
+    </div>
+  </section>
+
+  <section class="groups-section">
+    <h2>六組任務卡片</h2>
+    <div id="groupCards" class="group-cards-grid">
+      <!-- 六組任務卡片由 app.js 動態產生 -->
+    </div>
+  </section>
+
+  <section class="log-section">
+    <h2>新增處置記錄</h2>
+    <form id="logForm" class="log-form">
+      <label class="log-field">
+        <span>時間戳記</span>
+        <input type="datetime-local" id="logTimestamp" required>
+      </label>
+      <label class="log-field">
+        <span>事件分類</span>
+        <select id="logCategory">
+          <option>通報</option>
+          <option>派遣</option>
+          <option>到場</option>
+          <option>處理中</option>
+          <option>後送</option>
+          <option>完成</option>
+          <option>其他</option>
+        </select>
+      </label>
+      <label class="log-field">
+        <span>狀態</span>
+        <select id="logStatus">
+          <option>待命</option>
+          <option>出動</option>
+          <option>處理中</option>
+          <option>完成</option>
+        </select>
+      </label>
+      <label class="log-field log-note-field">
+        <span>內容備註</span>
+        <textarea id="logNote" rows="2" placeholder="輸入處置內容備註..."></textarea>
+      </label>
+      <button type="submit" class="submit-btn">送出</button>
+    </form>
+
+    <div class="log-list-header">
+      <h2>處置記錄時序列表</h2>
+      <button id="sortToggleBtn" class="sort-btn" type="button">最新在前 ▾</button>
+    </div>
+    <ul id="logList" class="log-list">
+      <li class="log-empty">載入中...</li>
+    </ul>
+  </section>
+
+</main>
+
+<div id="settingsOverlay" class="settings-overlay hidden"></div>
+<aside id="settingsPanel" class="settings-panel hidden">
+  <div class="settings-header">
+    <h2>設定</h2>
+    <button id="closeSettingsBtn" class="icon-btn" type="button" aria-label="關閉設定面板">✕</button>
+  </div>
+  <div class="settings-body">
+    <label class="settings-field">
+      <span>Apps Script 網址</span>
+      <input type="text" id="appsScriptUrlInput" placeholder="https://script.google.com/macros/s/.../exec">
+    </label>
+    <button id="saveUrlBtn" class="settings-save-btn" type="button">儲存網址</button>
+
+    <div class="mode-toggle">
+      <label class="mode-option">
+        <input type="radio" name="modeRadio" id="modeMock" value="mock">
+        使用示範資料
+      </label>
+      <label class="mode-option">
+        <input type="radio" name="modeRadio" id="modeLive" value="live">
+        使用真實資料
+      </label>
+    </div>
+
+    <div id="connectionStatus" class="connection-status">尚未載入</div>
+
+    <hr class="settings-divider">
+
+    <h3 class="settings-subheading">切換到新的演習場次</h3>
+    <p class="settings-hint">每次演習換新的「場控時序」檔案時，在這裡貼上新檔案的 Google Sheets 網址跟演習開始日期（對應時段表第一欄 09:00），按套用即可，不用重新部署 Apps Script。（此功能需先切換到「使用真實資料」才會真的送出。）</p>
+    <label class="settings-field">
+      <span>新場控時序檔案的 Google Sheets 網址</span>
+      <input type="text" id="newSpreadsheetUrlInput" placeholder="貼上這次演習的 Google Sheets 網址">
+    </label>
+    <label class="settings-field">
+      <span>演習開始日期（09:00 那一欄的日期）</span>
+      <input type="date" id="newExerciseDateInput">
+    </label>
+    <button id="applyConfigBtn" class="settings-save-btn" type="button">套用新場次設定</button>
+    <div id="configStatus" class="connection-status"></div>
+  </div>
+</aside>
+
+<script src="app.js"></script>
+</body>
+</html>
