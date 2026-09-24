@@ -1,5 +1,8 @@
 # 特搜場控即時看板
 
+**上線網址**：https://sar-command-dashboard.onrender.com/
+**GitHub repo**：https://github.com/nttc5405-a11y/sar-command-dashboard
+
 ## 這是什麼、能做什麼
 
 這是給消防特搜隊「場控組」在演習或任務時使用的即時看板網頁。放在固定電腦大螢幕
@@ -115,10 +118,12 @@ Claude 沒辦法幫你點 Google 的畫面、也不能幫你登入或按「允�
 4. 這時畫面應該會顯示真正的場控時序資料。如果卡在「載入中」或跳出錯誤，
    回頭檢查步驟 4 有沒有真的驗證通過。
 
-### 步驟 6：部署到 Render + GitHub
+### 步驟 6：部署到 Render + GitHub（已完成）
 
-- [ ] TODO：這部分還沒做，等你確認上面幾步都跑通、看板能顯示真實資料後，
-      我再繼續帶你做「建立 GitHub repo → 連接 Render → 設定 Static Site」。
+- GitHub repo：https://github.com/nttc5405-a11y/sar-command-dashboard（Public）
+- Render Static Site：https://sar-command-dashboard.onrender.com/
+- 之後要更新網頁內容，只要把改好的檔案 `git push` 到 GitHub 的 `main` 分支，
+  Render 會自動重新部署，不用手動操作。
 
 ## 檔案說明
 
