@@ -9,6 +9,10 @@
 *.gdraw
 *.gform
 
+# 分析用參考資料，不是專案的交付內容，不需要公開
+_reference/
+0703NAP-花費時間統計.xlsx
+
 # 常見通用排除規則（本專案目前不使用 Node.js，保留無妨）
 node_modules/
 .DS_Store

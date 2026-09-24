@@ -19,9 +19,17 @@
  *       但列的先後順序、中間有沒有空白列都不影響（見 readConfigValue 函式）。
  *
  *    B. 分頁名稱：「處置記錄」
- *       第 1 列放標題：ID | 時間戳記 | 事件分類 | 狀態 | 內容備註
+ *       第 1 列放標題：ID | 時間戳記 | 事件分類 | 狀態 | 內容備註 | 記錄類型 | 作業名稱 | 演練階段 | 地點/區域
  *       從第 2 列開始，每新增一筆記錄就是新增一列（由 addLog 動作自動寫入，
  *       使用者也可以自己在 Google Sheet 手動補登一列）。
+ *       後 4 欄（記錄類型／作業名稱／演練階段／地點區域）是「花費時間統計報表匯出」功能用的：
+ *       記錄類型填「開始」或「結束」、作業名稱填同一件事兩筆記錄要一樣的名稱，
+ *       exportReport 動作才能自動配對算出花費時間；填「單點事件」（或留空）的舊資料不受影響。
+ *
+ *       【重要】如果你是在既有的「看板控制中心」Sheet 上更新這份 Code.gs（不是全新建立），
+ *       請自己動手在「處置記錄」分頁的 F1、G1、H1、I1 手動補上「記錄類型」「作業名稱」
+ *       「演練階段」「地點/區域」這四個標題文字——程式不會自動幫你補標題列，只會從第 2 列
+ *       開始正常寫新資料；已存在的舊資料列（只有前 5 欄）完全不受影響，可以繼續使用。
  *
  * 4. 部署：Apps Script 編輯器右上角「部署 > 新增部署作業」，類型選「網頁應用程式」，
  *    「具有存取權的使用者」選「所有人」（因為場控組多人要用不同裝置存取，且沒有登入機制），
@@ -30,6 +38,10 @@
  *    看板前端（index.html）右上角「設定」面板的「Apps Script 網址」欄位。
  * 5. 第一次部署或改過程式碼重新部署後，Google 會要求你「授權」（因為要讀寫 Google Sheet）。
  *    照畫面指示選擇自己的帳號、允許存取即可。
+ * 6. 【每次改過 Code.gs 程式碼後都要注意】：光是在 Apps Script 編輯器按「儲存」
+ *    不會讓正式的 exec 網址吃到新程式碼！一定要「部署 > 管理部署作業 > 點編輯（鉛筆圖示）
+ *    > 版本選『新版本』> 部署」，新程式碼才會生效。部署用的 exec 網址不會改變，
+ *    看板前端設定面板裡的網址不用重新貼。
  *
  * 【重要假設，之後如果範本欄列順序改變，改這裡就好，不用重寫整支程式】
  * - 這支程式假設「場控時序」原始檔案裡，時序主表所在分頁固定叫做「場控時序」
@@ -116,8 +128,13 @@ function doGet(e) {
  * ============================================================================
  * doPost — 處理所有「寫入」類型的請求
  * 前端呼叫方式（body 是 JSON 字串）：
- *   {"action":"addLog", "timestamp":"...", "category":"...", "status":"...", "note":"..."}
+ *   {"action":"addLog", "timestamp":"...", "category":"...", "status":"...", "note":"...",
+ *    "recordType":"開始"|"結束"|"單點事件", "taskName":"...", "phase":"...", "area":"..."}
  *   {"action":"setConfig", "spreadsheetUrl":"...", "exerciseDate":"2026-11-XX"}
+ *   {"action":"exportReport"}
+ *     → 演習結束後，把「處置記錄」裡「開始」「結束」成對的記錄彙整成一份新的
+ *       花費時間統計 Google 試算表，成功回傳 {"success":true,"url":"..."}，
+ *       失敗回傳 {"success":false,"error":"..."}，見 handleExportReport()。
  * ============================================================================
  */
 function doPost(e) {
@@ -128,6 +145,8 @@ function doPost(e) {
       result = handleAddLog(payload);
     } else if (payload.action === 'setConfig') {
       result = handleSetConfig(payload);
+    } else if (payload.action === 'exportReport') {
+      result = handleExportReport();
     } else {
       result = { success: false, error: '未知的 action：' + payload.action };
     }
@@ -324,7 +343,10 @@ function handleGetTimeline() {
  * ============================================================================
  * handleGetLog — 讀取「處置記錄」分頁所有列
  * ============================================================================
- * 分頁欄位順序固定：ID | 時間戳記 | 事件分類 | 狀態 | 內容備註（第1列為標題，不讀取）
+ * 分頁欄位順序固定：ID | 時間戳記 | 事件分類 | 狀態 | 內容備註 |
+ *                    記錄類型 | 作業名稱 | 演練階段 | 地點/區域（第1列為標題，不讀取）
+ * 後 4 欄是「花費時間統計報表匯出」功能新增的，舊資料可能只有前 5 欄
+ * （F~I 欄讀到 undefined），一律用 `row[n] || ''` 防呆，不因舊資料缺欄位而噴錯。
  * 排序交給前端處理，這裡照表格原始順序回傳即可。
  */
 function handleGetLog() {
@@ -336,7 +358,7 @@ function handleGetLog() {
   var lastRow = logSheet.getLastRow();
   var logs = [];
   if (lastRow >= 2) {
-    var values = logSheet.getRange(2, 1, lastRow - 1, 5).getValues();
+    var values = logSheet.getRange(2, 1, lastRow - 1, 9).getValues();
     for (var i = 0; i < values.length; i++) {
       var row = values[i];
       if (!row[0] && !row[1]) continue; // 跳過完全空白的列
@@ -345,7 +367,11 @@ function handleGetLog() {
         timestamp: formatTimestampForOutput(row[1]),
         category: String(row[2] || ''),
         status: String(row[3] || ''),
-        note: String(row[4] || '')
+        note: String(row[4] || ''),
+        recordType: String(row[5] || ''),
+        taskName: String(row[6] || ''),
+        phase: String(row[7] || ''),
+        area: String(row[8] || '')
       });
     }
   }
@@ -368,6 +394,8 @@ function formatTimestampForOutput(value) {
  * ============================================================================
  * handleAddLog — 新增一筆處置記錄到「處置記錄」分頁最後一列
  * ============================================================================
+ * 欄位順序：ID | 時間戳記 | 事件分類 | 狀態 | 內容備註 |
+ *          記錄類型 | 作業名稱 | 演練階段 | 地點/區域（後 4 欄是新增的）
  */
 function handleAddLog(payload) {
   var controlSheet = SpreadsheetApp.getActiveSpreadsheet();
@@ -381,7 +409,11 @@ function handleAddLog(payload) {
     payload.timestamp || '',
     payload.category || '',
     payload.status || '',
-    payload.note || ''
+    payload.note || '',
+    payload.recordType || '',
+    payload.taskName || '',
+    payload.phase || '',
+    payload.area || ''
   ]);
   return { success: true, id: id };
 }
@@ -424,4 +456,166 @@ function upsertConfigValue(settingsSheet, label, value) {
     }
   }
   settingsSheet.appendRow([label, value]);
+}
+
+
+/**
+ * ============================================================================
+ * handleExportReport — 演習結束後，一鍵產出「花費時間統計」報表
+ * ============================================================================
+ * 邏輯（對照使用者過去手工範本「0703NAP-花費時間統計.xlsx」的格式重建，
+ * 範本本身沒有公式、是人工心算填的，這裡改用真正的計算，見 _reference/花費時間統計_範本分析.md）：
+ * 1. 讀「處置記錄」分頁全部資料，只留「記錄類型」是「開始」或「結束」的列（忽略「單點事件」）。
+ * 2. 依「作業名稱」把「開始」列跟「結束」列配對成一筆任務（同一作業名稱應剛好一組開始+一組結束；
+ *    只有開始沒有結束的，結束時間/花費分鐘留空，不噴錯、不跳過整筆）。
+ * 3. 任務依「開始」記錄原本的時間先後排序，再依「演練階段＋地點/區域」是否連續相同切成區塊。
+ * 4. 建立一份全新獨立的 Google 試算表（不是寫進「看板控制中心」自己這份），
+ *    每個區塊在 A（日期）／B（演練階段）／C（地點區域）／I（總計）四欄做合併儲存格，
+ *    I 欄填該區塊的花費分鐘總和。
+ * 整段包在 try/catch，任何錯誤都回傳 {success:false, error:...}，不會讓 doPost 掛掉。
+ */
+function handleExportReport() {
+  try {
+    var controlSheet = SpreadsheetApp.getActiveSpreadsheet();
+    var logSheet = controlSheet.getSheetByName(LOG_SHEET_NAME);
+    if (!logSheet) {
+      throw new Error('找不到「' + LOG_SHEET_NAME + '」分頁，請檢查看板控制中心 Sheet 的分頁名稱設定');
+    }
+
+    // ---- 第一步：讀出所有「開始」「結束」記錄（忽略單點事件、空白列）----
+    var lastRow = logSheet.getLastRow();
+    var records = [];
+    if (lastRow >= 2) {
+      var values = logSheet.getRange(2, 1, lastRow - 1, 9).getValues();
+      for (var i = 0; i < values.length; i++) {
+        var row = values[i];
+        if (!row[0] && !row[1]) continue; // 跳過完全空白的列
+        var recordType = String(row[5] || '');
+        if (recordType !== '開始' && recordType !== '結束') continue; // 只要開始/結束，單點事件不進報表
+        records.push({
+          timestamp: row[1],
+          note: String(row[4] || ''),
+          recordType: recordType,
+          taskName: String(row[6] || ''),
+          phase: String(row[7] || ''),
+          area: String(row[8] || '')
+        });
+      }
+    }
+
+    // ---- 第二步：依「作業名稱」配對「開始」「結束」----
+    // 假設同一作業名稱剛好一組開始+一組結束；如果同名重複出現，以最後一筆為準
+    // （這是為了不讓程式因為資料異常而噴錯，實務上請提醒使用者作業名稱盡量不要重複使用）。
+    var startByTask = {};
+    var endByTask = {};
+    records.forEach(function (r) {
+      if (!r.taskName) return; // 開始/結束記錄沒填作業名稱視為資料異常，無法配對，略過
+      if (r.recordType === '開始') {
+        startByTask[r.taskName] = r;
+      } else {
+        endByTask[r.taskName] = r;
+      }
+    });
+
+    // ---- 第三步：組成任務列，只有開始沒有結束的，結束時間/分鐘留空但仍列出 ----
+    var taskRows = [];
+    Object.keys(startByTask).forEach(function (taskName) {
+      var startRec = startByTask[taskName];
+      var endRec = endByTask[taskName]; // 可能不存在
+      var startDate = parseLogTimestampToDate(startRec.timestamp);
+      var endDate = endRec ? parseLogTimestampToDate(endRec.timestamp) : null;
+      var minutes = (startDate && endDate) ? Math.round((endDate.getTime() - startDate.getTime()) / 60000) : null;
+      taskRows.push({
+        sortTime: startDate ? startDate.getTime() : 0,
+        date: startDate ? Utilities.formatDate(startDate, 'Asia/Taipei', 'yyyy-MM-dd') : '',
+        phase: startRec.phase || '',
+        area: startRec.area || '',
+        taskName: taskName,
+        startTime: startDate ? Utilities.formatDate(startDate, 'Asia/Taipei', 'HH:mm') : '',
+        endTime: endDate ? Utilities.formatDate(endDate, 'Asia/Taipei', 'HH:mm') : '',
+        minutes: minutes,
+        note: startRec.note || ''
+      });
+    });
+
+    // ---- 第四步：依「開始」記錄原本的時間先後排序 ----
+    taskRows.sort(function (a, b) { return a.sortTime - b.sortTime; });
+
+    // ---- 第五步：依「演練階段＋地點/區域」是否連續相同，切成區塊 ----
+    var blocks = [];
+    taskRows.forEach(function (t) {
+      var lastBlock = blocks.length ? blocks[blocks.length - 1] : null;
+      if (lastBlock && lastBlock.phase === t.phase && lastBlock.area === t.area) {
+        lastBlock.rows.push(t);
+      } else {
+        blocks.push({ phase: t.phase, area: t.area, rows: [t] });
+      }
+    });
+
+    // ---- 第六步：建立全新獨立的 Google 試算表，寫入表頭與資料，區塊合併儲存格 ----
+    var fileTimestamp = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyyMMdd_HHmmss');
+    var newSpreadsheet = SpreadsheetApp.create('花費時間統計_' + fileTimestamp);
+    var sheet = newSpreadsheet.getActiveSheet();
+    sheet.setName('各作業花費時間統計'); // 沿用使用者過去手工範本原本的分頁名稱
+
+    var headers = ['日期', '演練階段', '地點/區域', '作業項目', '開始時間', '結束時間', '花費時間(分鐘)', '備註', '總計'];
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#d9e6f5');
+
+    var currentRow = 2;
+    blocks.forEach(function (block) {
+      var blockStartRow = currentRow;
+      var totalMinutes = 0;
+      var hasMinutes = false;
+      block.rows.forEach(function (t) {
+        sheet.getRange(currentRow, 1, 1, headers.length).setValues([[
+          t.date, t.phase, t.area, t.taskName, t.startTime, t.endTime,
+          (t.minutes === null || t.minutes === undefined) ? '' : t.minutes,
+          t.note, ''
+        ]]);
+        if (typeof t.minutes === 'number' && !isNaN(t.minutes)) {
+          totalMinutes += t.minutes;
+          hasMinutes = true;
+        }
+        currentRow++;
+      });
+      var blockEndRow = currentRow - 1;
+      // A／B／C／I 四欄合併，I 欄放區塊總花費分鐘數（有任務缺分鐘也仍列在表格裡，只是不計入加總）
+      if (blockEndRow > blockStartRow) {
+        sheet.getRange(blockStartRow, 1, blockEndRow - blockStartRow + 1, 1).merge();
+        sheet.getRange(blockStartRow, 2, blockEndRow - blockStartRow + 1, 1).merge();
+        sheet.getRange(blockStartRow, 3, blockEndRow - blockStartRow + 1, 1).merge();
+        sheet.getRange(blockStartRow, 9, blockEndRow - blockStartRow + 1, 1).merge();
+      }
+      sheet.getRange(blockStartRow, 9).setValue(hasMinutes ? formatMinutesSummary(totalMinutes) : '');
+    });
+
+    sheet.autoResizeColumns(1, headers.length);
+
+    return { success: true, url: newSpreadsheet.getUrl() };
+  } catch (err) {
+    return { success: false, error: String(err) };
+  }
+}
+
+/**
+ * 把「處置記錄」分頁讀到的時間戳記值（可能是 Date 物件、也可能是含時區的 ISO 字串）
+ * 轉成 JS Date；無法解析就回傳 null（呼叫端要自行防呆，不能假設一定拿得到有效日期）。
+ */
+function parseLogTimestampToDate(value) {
+  if (Object.prototype.toString.call(value) === '[object Date]') {
+    return value;
+  }
+  var d = new Date(value);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * 把總分鐘數格式化成「共 123 分鐘（約 2 小時 3 分）」這種易讀文字，寫進區塊的「總計」欄。
+ */
+function formatMinutesSummary(totalMinutes) {
+  var hours = Math.floor(totalMinutes / 60);
+  var mins = totalMinutes % 60;
+  var hourText = hours > 0 ? (hours + ' 小時' + (mins > 0 ? ' ' + mins + ' 分' : '')) : (mins + ' 分');
+  return '共 ' + totalMinutes + ' 分鐘（約 ' + hourText + '）';
 }

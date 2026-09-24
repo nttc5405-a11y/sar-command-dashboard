@@ -82,11 +82,17 @@
   ],
   "restColumns": [false, false, false, false, false, false, true, false, false, false],
   "logs": [
-    {"id": "demo-1", "timestamp": "2026-10-15T09:05:00+08:00", "category": "通報", "status": "待命", "note": "示範記錄：演習開始，各組陸續進駐待命位置。"},
-    {"id": "demo-2", "timestamp": "2026-10-15T10:20:00+08:00", "category": "派遣", "status": "出動", "note": "示範記錄：現場A組派遣至示範展館進行場地確認。"},
-    {"id": "demo-3", "timestamp": "2026-10-15T11:10:00+08:00", "category": "到場", "status": "處理中", "note": "示範記錄：INJECT no.1 觸發，現場A組已到場處理。"},
-    {"id": "demo-4", "timestamp": "2026-10-15T13:15:00+08:00", "category": "處理中", "status": "處理中", "note": "示範記錄：V1傷患情境一開始處置，傷控A組協同作業。"},
-    {"id": "demo-5", "timestamp": "2026-10-15T15:40:00+08:00", "category": "後送", "status": "出動", "note": "示範記錄：V2傷患後送示範醫院二院，救護車已出發。"},
-    {"id": "demo-6", "timestamp": "2026-10-15T17:30:00+08:00", "category": "完成", "status": "完成", "note": "示範記錄：情境二階段處置完成，各組回報彙整中。"}
+    {"id": "demo-1", "timestamp": "2026-10-15T09:05:00+08:00", "category": "通報", "status": "待命", "note": "示範記錄：演習開始，各組陸續進駐待命位置。", "recordType": "單點事件", "taskName": "", "phase": "", "area": ""},
+    {"id": "demo-2", "timestamp": "2026-10-15T10:20:00+08:00", "category": "派遣", "status": "出動", "note": "示範記錄：現場A組派遣至示範展館進行場地確認。", "recordType": "單點事件", "taskName": "", "phase": "", "area": ""},
+    {"id": "demo-3", "timestamp": "2026-10-15T11:10:00+08:00", "category": "到場", "status": "處理中", "note": "示範記錄：INJECT no.1 觸發，現場A組已到場處理。", "recordType": "單點事件", "taskName": "", "phase": "", "area": ""},
+    {"id": "demo-4", "timestamp": "2026-10-15T13:15:00+08:00", "category": "處理中", "status": "處理中", "note": "示範記錄：V1傷患情境一開始處置，傷控A組協同作業。", "recordType": "單點事件", "taskName": "", "phase": "", "area": ""},
+    {"id": "demo-5", "timestamp": "2026-10-15T15:40:00+08:00", "category": "後送", "status": "出動", "note": "示範記錄：V2傷患後送示範醫院二院，救護車已出發。", "recordType": "單點事件", "taskName": "", "phase": "", "area": ""},
+    {"id": "demo-6", "timestamp": "2026-10-15T17:30:00+08:00", "category": "完成", "status": "完成", "note": "示範記錄：情境二階段處置完成，各組回報彙整中。", "recordType": "單點事件", "taskName": "", "phase": "", "area": ""},
+    {"id": "demo-7", "timestamp": "2026-10-15T09:00:00+08:00", "category": "通報", "status": "待命", "note": "示範記錄：開始集結報到作業。", "recordType": "開始", "taskName": "集結報到", "phase": "動員階段", "area": "示範分隊"},
+    {"id": "demo-8", "timestamp": "2026-10-15T09:35:00+08:00", "category": "通報", "status": "完成", "note": "示範記錄：集結報到作業結束。", "recordType": "結束", "taskName": "集結報到", "phase": "動員階段", "area": "示範分隊"},
+    {"id": "demo-9", "timestamp": "2026-10-15T11:00:00+08:00", "category": "到場", "status": "處理中", "note": "示範記錄：開始現場範圍標示作業。", "recordType": "開始", "taskName": "現場範圍標示", "phase": "LEMA報到及BoO架設", "area": "示範展館"},
+    {"id": "demo-10", "timestamp": "2026-10-15T11:40:00+08:00", "category": "到場", "status": "完成", "note": "示範記錄：現場範圍標示作業結束。", "recordType": "結束", "taskName": "現場範圍標示", "phase": "LEMA報到及BoO架設", "area": "示範展館"},
+    {"id": "demo-11", "timestamp": "2026-10-15T13:20:00+08:00", "category": "處理中", "status": "處理中", "note": "示範記錄：開始傷患搜索作業。", "recordType": "開始", "taskName": "傷患搜索", "phase": "ASR2", "area": "情境一"},
+    {"id": "demo-12", "timestamp": "2026-10-15T14:05:00+08:00", "category": "處理中", "status": "完成", "note": "示範記錄：傷患搜索作業結束，V1傷患已尋獲。", "recordType": "結束", "taskName": "傷患搜索", "phase": "ASR2", "area": "情境一"}
   ]
 }

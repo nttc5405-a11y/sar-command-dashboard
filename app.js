@@ -21,6 +21,8 @@
   var REFRESH_INTERVAL_MS = 17000; // 每 17 秒自動重新抓一次資料（15~20 秒區間內）
   var CATEGORY_OPTIONS = ['通報', '派遣', '到場', '處理中', '後送', '完成', '其他'];
   var STATUS_OPTIONS = ['待命', '出動', '處理中', '完成'];
+  var RECORD_TYPE_OPTIONS = ['單點事件', '開始', '結束'];
+  var OTHER_OPTION_VALUE = '__other__'; // 演練階段/地點區域下拉選單「其他（自行輸入）」選項的 value
 
   // ===== 全域狀態 =====
   var state = {
@@ -33,6 +35,7 @@
     viewingColumnIndex: 0, // 使用者目前正在檢視的時段索引（可能不等於 currentColumnIndex）
     sortOrder: 'desc', // 處置記錄排序：'desc' = 最新在前，'asc' = 最舊在前
     lastLogsSignature: '', // 用來判斷 logs 有沒有變動，變動才重繪列表，減少閃爍
+    lastPhaseAreaSignature: '', // 用來判斷「演練階段」「地點/區域」下拉選單的來源資料有沒有變動
     refreshTimer: null,
     mockDataCache: null // 快取讀過的 mock-data.json 內容，避免每次都重新 fetch
   };
@@ -182,7 +185,11 @@
           timestamp: payload.timestamp,
           category: payload.category,
           status: payload.status,
-          note: payload.note
+          note: payload.note,
+          recordType: payload.recordType || '單點事件',
+          taskName: payload.taskName || '',
+          phase: payload.phase || '',
+          area: payload.area || ''
         };
         data.logs = data.logs || [];
         data.logs.push(newLog);
@@ -214,6 +221,25 @@
       body: JSON.stringify(body)
     }).then(function (res) {
       if (!res.ok) throw new Error('更新設定失敗：HTTP ' + res.status);
+      return res.json();
+    });
+  }
+
+  // 演習結束後，一鍵呼叫後端把「處置記錄」裡的開始/結束配對，彙整成一份新的
+  // 花費時間統計 Google 試算表。mock 模式沒有真正的後端可以建立試算表，
+  // 呼叫端（bindEvents 裡的按鈕事件）會在呼叫這個函式之前就先擋下 mock 模式，
+  // 不會真的送出請求，這裡仍保留防呆判斷以防未來程式改動漏擋。
+  function postExportReport() {
+    if (state.mode === 'mock') {
+      return Promise.resolve({ success: false, error: '示範模式無法產生真實報表，請切換到「使用真實資料」模式' });
+    }
+    var body = { action: 'exportReport' };
+    return fetch(state.appsScriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(body)
+    }).then(function (res) {
+      if (!res.ok) throw new Error('產出報表失敗：HTTP ' + res.status);
       return res.json();
     });
   }
@@ -337,6 +363,59 @@
     });
   }
 
+  // ===== 畫面渲染：新增處置記錄表單的「演練階段」「地點/區域」下拉選單 =====
+
+  // 從 state.timeline.rows 裡找出 label 符合的那一列，取出不重複、非空、非「—」的值，
+  // 順序照原始欄位順序（不重新排序），供下拉選單使用。
+  function getUniqueRowValues(label) {
+    if (!state.timeline || !state.timeline.rows) return [];
+    var row = null;
+    for (var i = 0; i < state.timeline.rows.length; i++) {
+      if (state.timeline.rows[i].label === label) {
+        row = state.timeline.rows[i];
+        break;
+      }
+    }
+    if (!row) return [];
+    var seen = {};
+    var result = [];
+    (row.values || []).forEach(function (v) {
+      var val = (v || '').trim();
+      if (!val || val === '—' || seen[val]) return;
+      seen[val] = true;
+      result.push(val);
+    });
+    return result;
+  }
+
+  // 重建一個下拉選單的選項，固定在最後加一個「其他（自行輸入）」選項；
+  // 如果重建前選到的值在新選項裡還存在，重建後盡量保留原本選的值，避免使用者填到一半被清空。
+  function renderSelectOptions(selectEl, values) {
+    if (!selectEl) return;
+    var previousValue = selectEl.value;
+    var html = '';
+    values.forEach(function (v) {
+      html += '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>';
+    });
+    html += '<option value="' + OTHER_OPTION_VALUE + '">其他（自行輸入）</option>';
+    selectEl.innerHTML = html;
+    if (previousValue && (values.indexOf(previousValue) !== -1 || previousValue === OTHER_OPTION_VALUE)) {
+      selectEl.value = previousValue;
+    }
+  }
+
+  // 「演練階段」「地點/區域」的可選值是動態從目前時段資料算出來的（不同演習階段名稱不固定，不能寫死），
+  // 用簽章比對避免資料沒變時也重建選單（重建會打斷使用者正在操作的下拉選單）。
+  function renderPhaseAreaOptions() {
+    var phaseValues = getUniqueRowValues('階段');
+    var areaValues = getUniqueRowValues('區域');
+    var signature = JSON.stringify(phaseValues) + '||' + JSON.stringify(areaValues);
+    if (signature === state.lastPhaseAreaSignature) return;
+    state.lastPhaseAreaSignature = signature;
+    renderSelectOptions(document.getElementById('logPhase'), phaseValues);
+    renderSelectOptions(document.getElementById('logArea'), areaValues);
+  }
+
   // ===== 畫面渲染：處置記錄列表 =====
 
   function sortLogs(logs) {
@@ -372,13 +451,35 @@
     var html = sorted.map(function (log) {
       return '' +
         '<li class="log-item">' +
-        '  <span class="log-time">' + formatLogTimestamp(log.timestamp) + '</span>' +
-        '  <span class="log-category">' + escapeHtml(log.category) + '</span>' +
-        '  <span class="log-status log-status-' + escapeHtml(log.status) + '">' + escapeHtml(log.status) + '</span>' +
-        '  <span class="log-note">' + escapeHtml(log.note || '') + '</span>' +
+        '  <div class="log-item-main">' +
+        '    <span class="log-time">' + formatLogTimestamp(log.timestamp) + '</span>' +
+        '    <span class="log-category">' + escapeHtml(log.category) + '</span>' +
+        '    <span class="log-status log-status-' + escapeHtml(log.status) + '">' + escapeHtml(log.status) + '</span>' +
+        '    <span class="log-note">' + escapeHtml(log.note || '') + '</span>' +
+        '  </div>' +
+        renderLogTags(log) +
         '</li>';
     }).join('');
     listEl.innerHTML = html;
+  }
+
+  // 記錄類型/作業名稱/演練階段/地點區域這幾個新欄位用小標籤顯示在每筆記錄下方，
+  // 方便使用者匯出報表前肉眼確認資料填對；沒有值的欄位不顯示標籤，也不佔位置。
+  function renderLogTags(log) {
+    var tags = [];
+    if (log.recordType && log.recordType !== '單點事件') {
+      tags.push('<span class="log-tag log-tag-recordtype">' + escapeHtml(log.recordType) + '</span>');
+    }
+    if (log.taskName) {
+      tags.push('<span class="log-tag">作業：' + escapeHtml(log.taskName) + '</span>');
+    }
+    if (log.phase) {
+      tags.push('<span class="log-tag">階段：' + escapeHtml(log.phase) + '</span>');
+    }
+    if (log.area) {
+      tags.push('<span class="log-tag">區域：' + escapeHtml(log.area) + '</span>');
+    }
+    return tags.length ? '<div class="log-tags">' + tags.join('') + '</div>' : '';
   }
 
   function escapeHtml(str) {
@@ -458,6 +559,7 @@
         renderNonCurrentBanner();
         renderCurrentSlotCard();
         renderGroupCards();
+        renderPhaseAreaOptions();
         renderLogList();
       })
       .catch(function (err) {
@@ -587,6 +689,19 @@
       renderLogList();
     });
 
+    // 記錄類型切換：只有「開始」「結束」才需要填「作業名稱」
+    document.getElementById('logRecordType').addEventListener('change', function (e) {
+      updateTaskNameFieldVisibility(e.target.value);
+    });
+
+    // 演練階段／地點區域選到「其他（自行輸入）」時，顯示對應的自訂文字輸入框
+    document.getElementById('logPhase').addEventListener('change', function (e) {
+      toggleHidden('logPhaseOtherField', e.target.value === OTHER_OPTION_VALUE);
+    });
+    document.getElementById('logArea').addEventListener('change', function (e) {
+      toggleHidden('logAreaOtherField', e.target.value === OTHER_OPTION_VALUE);
+    });
+
     // 新增處置記錄表單
     document.getElementById('logForm').addEventListener('submit', function (e) {
       e.preventDefault();
@@ -594,9 +709,27 @@
       var category = document.getElementById('logCategory').value;
       var status = document.getElementById('logStatus').value;
       var note = document.getElementById('logNote').value.trim();
+      var recordType = document.getElementById('logRecordType').value;
+      var isStartOrEnd = recordType === '開始' || recordType === '結束';
+
+      var taskName = isStartOrEnd ? document.getElementById('logTaskName').value.trim() : '';
+
+      var phaseSelect = document.getElementById('logPhase');
+      var phase = phaseSelect.value === OTHER_OPTION_VALUE
+        ? document.getElementById('logPhaseOtherInput').value.trim()
+        : phaseSelect.value;
+
+      var areaSelect = document.getElementById('logArea');
+      var area = areaSelect.value === OTHER_OPTION_VALUE
+        ? document.getElementById('logAreaOtherInput').value.trim()
+        : areaSelect.value;
 
       if (!timestampInput) {
         alert('請填寫時間戳記');
+        return;
+      }
+      if (isStartOrEnd && !taskName) {
+        alert('記錄類型選「開始」或「結束」時，請填寫作業名稱（同一作業名稱的開始跟結束會自動配對）');
         return;
       }
       // datetime-local 輸入沒有時區資訊，這裡當作台灣時間 +08:00 補上
@@ -605,9 +738,19 @@
       var submitBtn = e.target.querySelector('button[type="submit"]');
       if (submitBtn) submitBtn.disabled = true;
 
-      postAddLog({ timestamp: isoTimestamp, category: category, status: status, note: note })
+      postAddLog({
+        timestamp: isoTimestamp,
+        category: category,
+        status: status,
+        note: note,
+        recordType: recordType,
+        taskName: taskName,
+        phase: phase,
+        area: area
+      })
         .then(function () {
           document.getElementById('logNote').value = '';
+          document.getElementById('logTaskName').value = '';
           setDefaultLogTimestamp();
           return refreshAll(false);
         })
@@ -618,6 +761,54 @@
           if (submitBtn) submitBtn.disabled = false;
         });
     });
+
+    // 產出花費時間統計報表
+    document.getElementById('exportReportBtn').addEventListener('click', function () {
+      var statusEl = document.getElementById('exportReportStatus');
+      if (!statusEl) return;
+      statusEl.classList.remove('hidden');
+
+      if (state.mode === 'mock') {
+        statusEl.textContent = '示範模式無法產生真實報表，請切換到「使用真實資料」模式後再試一次（右上角「⚙ 設定」）。';
+        statusEl.className = 'connection-status export-status status-mock';
+        return;
+      }
+      if (!state.appsScriptUrl) {
+        statusEl.textContent = '尚未設定 Apps Script 網址，請先到「⚙ 設定」填寫並儲存。';
+        statusEl.className = 'connection-status export-status status-error';
+        return;
+      }
+
+      statusEl.textContent = '報表產生中，請稍候...';
+      statusEl.className = 'connection-status export-status';
+
+      postExportReport()
+        .then(function (result) {
+          if (result && result.success && result.url) {
+            statusEl.innerHTML = '報表已產生，<a href="' + escapeHtml(result.url) + '" target="_blank" rel="noopener noreferrer">點此開啟</a>';
+            statusEl.className = 'connection-status export-status status-live';
+          } else {
+            statusEl.textContent = '產出報表失敗：' + ((result && result.error) || '未知錯誤');
+            statusEl.className = 'connection-status export-status status-error';
+          }
+        })
+        .catch(function (err) {
+          statusEl.textContent = '產出報表失敗：' + err.message;
+          statusEl.className = 'connection-status export-status status-error';
+        });
+    });
+  }
+
+  // 切換「作業名稱」欄位的顯示：只有記錄類型是「開始」或「結束」才需要填
+  function updateTaskNameFieldVisibility(recordType) {
+    toggleHidden('logTaskNameField', recordType === '開始' || recordType === '結束');
+  }
+
+  // 顯示/隱藏指定 id 的欄位（沿用畫面既有的 .hidden 工具 class）
+  function toggleHidden(id, shouldShow) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('hidden', !shouldShow);
   }
 
   function onViewingIndexChanged() {

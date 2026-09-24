@@ -63,6 +63,38 @@
         <input type="datetime-local" id="logTimestamp" required>
       </label>
       <label class="log-field">
+        <span>記錄類型</span>
+        <select id="logRecordType">
+          <option value="單點事件">單點事件</option>
+          <option value="開始">開始</option>
+          <option value="結束">結束</option>
+        </select>
+      </label>
+      <label class="log-field hidden" id="logTaskNameField">
+        <span>作業名稱</span>
+        <input type="text" id="logTaskName" placeholder="例如：實木切割">
+      </label>
+      <label class="log-field">
+        <span>演練階段</span>
+        <select id="logPhase">
+          <option value="__other__">其他（自行輸入）</option>
+        </select>
+      </label>
+      <label class="log-field hidden" id="logPhaseOtherField">
+        <span>演練階段（自行輸入）</span>
+        <input type="text" id="logPhaseOtherInput" placeholder="輸入演練階段名稱">
+      </label>
+      <label class="log-field">
+        <span>地點/區域</span>
+        <select id="logArea">
+          <option value="__other__">其他（自行輸入）</option>
+        </select>
+      </label>
+      <label class="log-field hidden" id="logAreaOtherField">
+        <span>地點/區域（自行輸入）</span>
+        <input type="text" id="logAreaOtherInput" placeholder="輸入地點/區域名稱">
+      </label>
+      <label class="log-field">
         <span>事件分類</span>
         <select id="logCategory">
           <option>通報</option>
@@ -92,8 +124,12 @@
 
     <div class="log-list-header">
       <h2>處置記錄時序列表</h2>
-      <button id="sortToggleBtn" class="sort-btn" type="button">最新在前 ▾</button>
+      <div class="log-list-actions">
+        <button id="exportReportBtn" class="export-btn" type="button">📊 產出花費時間統計報表</button>
+        <button id="sortToggleBtn" class="sort-btn" type="button">最新在前 ▾</button>
+      </div>
     </div>
+    <div id="exportReportStatus" class="connection-status export-status hidden"></div>
     <ul id="logList" class="log-list">
       <li class="log-empty">載入中...</li>
     </ul>
